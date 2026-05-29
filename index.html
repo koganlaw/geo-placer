@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Geo Placer — Pin the State</title>
+<title>Geo Placer — Pin it on the map</title>
 <link rel="icon" href="data:,">
 <style>
   :root {
@@ -58,7 +58,9 @@
   .how h3 { margin: 0 0 10px; font-size: 16px; color: var(--accent); }
   .how ol { margin: 0; padding-left: 20px; color: var(--muted); line-height: 1.7; font-size: 15px; }
   .how b { color: var(--text); }
-  .controls { display: flex; gap: 14px; justify-content: center; align-items: center; flex-wrap: wrap; }
+  .controls { display: flex; gap: 14px; justify-content: center; align-items: flex-end; flex-wrap: wrap; }
+  .field { display: flex; flex-direction: column; gap: 5px; text-align: left; }
+  .field > span { font-size: 12px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); padding-left: 2px; }
   select, button {
     font: inherit; border-radius: 10px; border: 1px solid #33466e;
     background: var(--panel); color: var(--text); padding: 12px 18px; cursor: pointer;
@@ -81,9 +83,19 @@
   .prompt-wrap { flex: 1 1 auto; min-width: 220px; }
   .prompt-label { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; }
   .prompt-name { font-size: clamp(24px, 4vw, 36px); font-weight: 800; line-height: 1.05; }
-  .hud-stat { text-align: center; min-width: 78px; }
+  .hud-stat { text-align: center; min-width: 72px; }
   .hud-stat .v { font-size: 22px; font-weight: 800; }
   .hud-stat .k { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+
+  /* timed-only HUD bits */
+  .timed-only { display: none; }
+  #screen-game.timed .timed-only { display: block; }
+  .timerbar { display: none; flex: 1 0 100%; align-items: center; gap: 10px; margin-top: 6px; }
+  #screen-game.timed .timerbar { display: flex; }
+  .timerbar-track { flex: 1 1 auto; height: 8px; background: #0d1830; border-radius: 6px; overflow: hidden; }
+  .timerbar-fill { height: 100%; width: 100%; background: linear-gradient(90deg, var(--good), var(--mid)); transition: width 0.1s linear; }
+  .timerbar-fill.low { background: var(--bad); }
+  .timerbar-secs { min-width: 36px; text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--muted); }
 
   .map-card {
     position: relative; background: var(--water);
@@ -113,6 +125,7 @@
     background: var(--panel); border: 1px solid #2a3a5e;
   }
   .verdict .pts { color: var(--accent); }
+  .verdict .bonus { color: var(--accent-2); font-size: 16px; }
   .verdict.perfect { border-color: var(--good); }
   .verdict.perfect .pts { color: var(--good); }
   .feedback .sub { color: var(--muted); font-size: 15px; }
@@ -128,14 +141,19 @@
   .final-sub { color: var(--muted); margin: 6px 0 24px; font-size: 18px; }
   .recap {
     background: var(--panel); border: 1px solid #2a3a5e; border-radius: 14px;
-    max-width: 620px; margin: 0 auto 24px; max-height: 46vh; overflow: auto; text-align: left;
+    max-width: 620px; margin: 0 auto 16px; max-height: 42vh; overflow: auto; text-align: left;
   }
   .recap-row { display: flex; align-items: center; gap: 12px; padding: 9px 16px; border-bottom: 1px solid #243456; }
   .recap-row:last-child { border-bottom: none; }
   .recap-row .nm { flex: 1 1 auto; font-weight: 600; }
   .recap-row .ds { color: var(--muted); font-size: 14px; min-width: 96px; text-align: right; }
-  .recap-row .pt { font-weight: 800; min-width: 54px; text-align: right; }
+  .recap-row .pt { font-weight: 800; min-width: 70px; text-align: right; }
   .dotmark { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+  .share-field {
+    width: 100%; max-width: 620px; margin: 0 auto 18px; display: block;
+    padding: 11px 13px; border-radius: 10px; border: 1px solid #33466e;
+    background: #0d1830; color: var(--text); font-size: 13px;
+  }
 </style>
 </head>
 <body>
@@ -148,15 +166,19 @@
     <div class="how">
       <h3>How to play</h3>
       <ol>
-        <li>You'll be given a <b>state name</b>, one at a time.</li>
-        <li><b>Click the map</b> where you think that state is.</li>
-        <li>Land <b>inside the state</b> &rarr; a perfect <b>100</b>. Miss it, and points fall off with distance.</li>
-        <li>All <b>50 states</b>, in random order. Max score <b>5000</b>.</li>
+        <li>You'll be given a <b>place name</b> &mdash; a state, country, or capital &mdash; one at a time.</li>
+        <li><b>Click the map</b> where you think it is.</li>
+        <li>Land <b>inside it</b> &rarr; a perfect <b>100</b>. Miss, and points fall off with distance.</li>
+        <li>Pick a <b>map</b>, <b>length</b>, and <b>mode</b> below, then go. Random order every time.</li>
       </ol>
     </div>
     <div class="controls">
-      <label class="hidden" for="map-select">Map</label>
-      <select id="map-select" aria-label="Choose a map"></select>
+      <label class="field"><span>Map</span>
+        <select id="map-select" aria-label="Choose a map"></select></label>
+      <label class="field"><span>Length</span>
+        <select id="round-select" aria-label="How many rounds"></select></label>
+      <label class="field"><span>Mode</span>
+        <select id="mode-select" aria-label="Game mode"></select></label>
       <button class="primary" id="btn-start">Start game</button>
     </div>
   </section>
@@ -165,11 +187,16 @@
   <section id="screen-game" class="screen hidden">
     <div class="hud">
       <div class="prompt-wrap">
-        <div class="prompt-label">Find this state</div>
+        <div class="prompt-label" id="prompt-label">Find this place</div>
         <div class="prompt-name" id="prompt-name">&mdash;</div>
       </div>
       <div class="hud-stat"><div class="v" id="hud-round">1/50</div><div class="k">Round</div></div>
+      <div class="hud-stat timed-only"><div class="v" id="hud-streak">&#128293;0</div><div class="k">Streak</div></div>
       <div class="hud-stat"><div class="v" id="hud-score">0</div><div class="k">Score</div></div>
+      <div class="timerbar" id="timerbar">
+        <div class="timerbar-track"><div class="timerbar-fill" id="timerbar-fill"></div></div>
+        <div class="timerbar-secs" id="timerbar-secs">12s</div>
+      </div>
     </div>
 
     <div class="map-card" id="map-card">
@@ -185,8 +212,10 @@
     <div class="final-score" id="final-score">0</div>
     <div class="final-sub" id="final-sub">out of 5000</div>
     <div class="recap" id="recap"></div>
+    <input id="share-field" class="share-field hidden" readonly aria-label="Shareable result text">
     <div class="controls">
       <button class="primary" id="btn-again">Play again</button>
+      <button id="btn-copy">Copy result</button>
       <button id="btn-home">Change map</button>
     </div>
   </section>
@@ -201,11 +230,20 @@
 /* ============================================================
    Geo Placer — the engine is map-agnostic.
    Add a new map by adding one entry to MAPS below.
+   Region maps quiz polygons (states/countries); point maps
+   quiz coordinates (capitals). Modes: relaxed | timed.
    ============================================================ */
 
 const WIDTH = 960, HEIGHT = 600;        // internal SVG coordinate system (viewBox)
 const EARTH_MILES = 3958.8;             // mean radius
-const DECAY_MILES = 300;                // outside score = 100 * exp(-milesOff / DECAY_MILES)
+const DEFAULT_DECAY = 300;              // outside score = 100 * exp(-milesOff / decay)
+const POINT_PERFECT_MI = 25;            // point targets (capitals): within this = "spot on"
+const ROUND_SECONDS = 12;               // timed mode: seconds per round
+const STREAK_GOOD = 60;                 // accuracy >= this keeps a streak alive
+const SHARE_URL = "https://koganlaw.github.io/geo-placer/";
+
+const US_URL = "https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json";
+const WORLD_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
 
 // The 50 states (excludes DC & territories) — used to filter the US dataset.
 const US_STATES = new Set([
@@ -218,24 +256,110 @@ const US_STATES = new Set([
   "Tennessee","Texas","Utah","Vermont","Virginia","Washington","West Virginia",
   "Wisconsin","Wyoming"
 ]);
+const US_STATES_DC = new Set([...US_STATES, "District of Columbia"]);
+
+// Drop from the world quiz (still drawn as part of the land silhouette).
+const WORLD_EXCLUDE = new Set(["Antarctica"]);
+
+// US state capitals as [longitude, latitude] — city centers.
+const CAPITALS = [
+  { name: "Montgomery",     coords: [-86.279, 32.361] },
+  { name: "Juneau",         coords: [-134.412, 58.301] },
+  { name: "Phoenix",        coords: [-112.073, 33.448] },
+  { name: "Little Rock",    coords: [-92.289, 34.746] },
+  { name: "Sacramento",     coords: [-121.494, 38.576] },
+  { name: "Denver",         coords: [-104.985, 39.739] },
+  { name: "Hartford",       coords: [-72.685, 41.764] },
+  { name: "Dover",          coords: [-75.524, 39.158] },
+  { name: "Tallahassee",    coords: [-84.281, 30.438] },
+  { name: "Atlanta",        coords: [-84.388, 33.749] },
+  { name: "Honolulu",       coords: [-157.857, 21.307] },
+  { name: "Boise",          coords: [-116.200, 43.617] },
+  { name: "Springfield",    coords: [-89.650, 39.798] },
+  { name: "Indianapolis",   coords: [-86.158, 39.768] },
+  { name: "Des Moines",     coords: [-93.620, 41.591] },
+  { name: "Topeka",         coords: [-95.689, 39.048] },
+  { name: "Frankfort",      coords: [-84.873, 38.197] },
+  { name: "Baton Rouge",    coords: [-91.187, 30.458] },
+  { name: "Augusta",        coords: [-69.779, 44.307] },
+  { name: "Annapolis",      coords: [-76.491, 38.979] },
+  { name: "Boston",         coords: [-71.058, 42.360] },
+  { name: "Lansing",        coords: [-84.555, 42.733] },
+  { name: "Saint Paul",     coords: [-93.094, 44.954] },
+  { name: "Jackson",        coords: [-90.185, 32.299] },
+  { name: "Jefferson City", coords: [-92.173, 38.579] },
+  { name: "Helena",         coords: [-112.036, 46.596] },
+  { name: "Lincoln",        coords: [-96.703, 40.808] },
+  { name: "Carson City",    coords: [-119.754, 39.164] },
+  { name: "Concord",        coords: [-71.538, 43.207] },
+  { name: "Trenton",        coords: [-74.770, 40.220] },
+  { name: "Santa Fe",       coords: [-105.937, 35.687] },
+  { name: "Albany",         coords: [-73.757, 42.652] },
+  { name: "Raleigh",        coords: [-78.638, 35.780] },
+  { name: "Bismarck",       coords: [-100.779, 46.808] },
+  { name: "Columbus",       coords: [-82.999, 39.961] },
+  { name: "Oklahoma City",  coords: [-97.534, 35.467] },
+  { name: "Salem",          coords: [-123.029, 44.942] },
+  { name: "Harrisburg",     coords: [-76.882, 40.264] },
+  { name: "Providence",     coords: [-71.422, 41.824] },
+  { name: "Columbia",       coords: [-81.035, 34.000] },
+  { name: "Pierre",         coords: [-100.351, 44.367] },
+  { name: "Nashville",      coords: [-86.784, 36.166] },
+  { name: "Austin",         coords: [-97.743, 30.267] },
+  { name: "Salt Lake City", coords: [-111.891, 40.761] },
+  { name: "Montpelier",     coords: [-72.576, 44.260] },
+  { name: "Richmond",       coords: [-77.436, 37.541] },
+  { name: "Olympia",        coords: [-122.893, 47.038] },
+  { name: "Charleston",     coords: [-81.633, 38.336] },
+  { name: "Madison",        coords: [-89.384, 43.074] },
+  { name: "Cheyenne",       coords: [-104.802, 41.140] }
+];
 
 const MAPS = {
   "us-states": {
     label: "United States — 50 states",
-    topojson: "https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json",
+    unit: "state",
+    topojson: US_URL,
     object: "states",                 // key in topo.objects
     nameProp: "name",                 // feature.properties[nameProp]
-    nationObject: "nation",           // optional pre-merged silhouette
-    filterNames: US_STATES,           // optional: keep only these features
+    nationObject: "nation",           // pre-merged silhouette
+    filterNames: US_STATES,           // keep only these features
+    decayMiles: 300,
     projection: () => d3.geoAlbersUsa()
+  },
+  "us-states-dc": {
+    label: "United States — 50 states + DC",
+    unit: "state",
+    topojson: US_URL,
+    object: "states",
+    nameProp: "name",
+    nationObject: "nation",
+    filterNames: US_STATES_DC,
+    decayMiles: 300,
+    projection: () => d3.geoAlbersUsa()
+  },
+  "us-capitals": {
+    label: "United States — state capitals",
+    unit: "capital",
+    kind: "points",                   // quiz coordinates, not polygons
+    topojson: US_URL,                 // loaded only for the silhouette + projection fit
+    nameProp: "name",
+    nationObject: "nation",
+    points: CAPITALS,
+    decayMiles: 150,                  // cities are small targets
+    projection: () => d3.geoAlbersUsa()
+  },
+  "world": {
+    label: "World — countries",
+    unit: "country",
+    topojson: WORLD_URL,
+    object: "countries",
+    nameProp: "name",
+    nationObject: "land",             // pre-merged landmass = blank silhouette
+    excludeNames: WORLD_EXCLUDE,
+    decayMiles: 500,                  // world is bigger — gentler falloff
+    projection: () => d3.geoNaturalEarth1()
   }
-  // Future example (drop-in):
-  // "world": {
-  //   label: "World — countries",
-  //   topojson: "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json",
-  //   object: "countries", nameProp: "name",
-  //   projection: () => d3.geoNaturalEarth1()
-  // }
 };
 
 /* ---------------- DOM refs ---------------- */
@@ -244,11 +368,19 @@ const screenTitle = el("screen-title");
 const screenGame  = el("screen-game");
 const screenFinal = el("screen-final");
 const mapSelect   = el("map-select");
+const roundSelect = el("round-select");
+const modeSelect  = el("mode-select");
 const mapCard     = el("map-card");
 const feedbackEl  = el("feedback");
 const promptName  = el("prompt-name");
+const promptLabel = el("prompt-label");
 const hudRound    = el("hud-round");
+const hudStreak   = el("hud-streak");
 const hudScore    = el("hud-score");
+const timerFill   = el("timerbar-fill");
+const timerSecs   = el("timerbar-secs");
+const btnCopy     = el("btn-copy");
+const shareField  = el("share-field");
 
 /* ---------------- Game state ---------------- */
 let G = null;   // active game object
@@ -285,7 +417,6 @@ function shuffle(arr) {
 function milesBetween(a, b) { return d3.geoDistance(a, b) * EARTH_MILES; }
 
 // Distance (miles) from a point to the nearest boundary vertex of a feature.
-// Vertex approximation — accurate enough for scoring.
 function milesToFeature(feature, point) {
   let min = Infinity;
   const g = feature.geometry;
@@ -301,10 +432,10 @@ function milesToFeature(feature, point) {
   return min;
 }
 
-function scoreFor(inside, miles) {
+function scoreFor(inside, miles, decay) {
   if (inside) return 100;
   if (!isFinite(miles)) return 0;
-  return Math.round(100 * Math.exp(-miles / DECAY_MILES));
+  return Math.round(100 * Math.exp(-miles / (decay || DEFAULT_DECAY)));
 }
 
 function ptColor(pts) {
@@ -313,6 +444,14 @@ function ptColor(pts) {
   return "var(--bad)";
 }
 
+/* ---------------- Best-score persistence (localStorage) ---------------- */
+function bestKey(mapId, len, mode) { return "geoplacer.best." + mapId + "." + len + "." + mode; }
+function readBest(key) {
+  try { const v = parseInt(localStorage.getItem(key), 10); return isFinite(v) ? v : null; }
+  catch (e) { return null; }
+}
+function writeBest(key, v) { try { localStorage.setItem(key, String(v)); } catch (e) {} }
+
 /* ---------------- Map loading ---------------- */
 async function loadMap(config) {
   const topo = await fetch(config.topojson).then(r => {
@@ -320,14 +459,20 @@ async function loadMap(config) {
     return r.json();
   });
 
-  const obj = topo.objects[config.object];
-  let geoms = obj.geometries;
-  if (config.filterNames) {
-    geoms = geoms.filter(g => g.properties && config.filterNames.has(g.properties[config.nameProp]));
+  let geoms = [];
+  let features = [];
+  if (config.object) {
+    geoms = topo.objects[config.object].geometries;
+    if (config.filterNames) {
+      geoms = geoms.filter(g => g.properties && config.filterNames.has(g.properties[config.nameProp]));
+    }
+    if (config.excludeNames) {
+      geoms = geoms.filter(g => !(g.properties && config.excludeNames.has(g.properties[config.nameProp])));
+    }
+    features = geoms.map(g => topojson.feature(topo, g));
   }
-  const features = geoms.map(g => topojson.feature(topo, g));
 
-  // Silhouette: prefer a pre-merged "nation" object; else merge the kept geometries.
+  // Silhouette: prefer a pre-merged object; else merge the kept geometries.
   let silhouette;
   if (config.nationObject && topo.objects[config.nationObject]) {
     silhouette = topojson.feature(topo, topo.objects[config.nationObject]);
@@ -338,9 +483,17 @@ async function loadMap(config) {
   return { features, silhouette, config };
 }
 
+function buildTargets(loaded) {
+  const cfg = loaded.config;
+  if (cfg.kind === "points") {
+    return cfg.points.map(p => ({ name: p.name, kind: "point", coords: p.coords }));
+  }
+  return loaded.features.map(f => ({ name: f.properties[cfg.nameProp], kind: "region", feature: f }));
+}
+
 /* ---------------- Rendering ---------------- */
-function renderMap(map) {
-  const { features, silhouette, config } = map;
+function renderMap(loaded) {
+  const { features, silhouette, config } = loaded;
 
   const projection = config.projection().fitSize([WIDTH, HEIGHT], silhouette);
   const path = d3.geoPath(projection);
@@ -375,13 +528,38 @@ function renderMap(map) {
   return { svg, path, projection, byName, overlay, features, config };
 }
 
+/* ---------------- Timer (timed mode) ---------------- */
+function startTimer() {
+  stopTimer();
+  G.roundStart = performance.now();
+  setTimerUI(1, ROUND_SECONDS);
+  G.timerId = setInterval(timerTick, 100);
+}
+function timerTick() {
+  const remaining = ROUND_SECONDS - (performance.now() - G.roundStart) / 1000;
+  if (remaining <= 0) { setTimerUI(0, 0); stopTimer(); onTimeout(); return; }
+  setTimerUI(remaining / ROUND_SECONDS, remaining);
+}
+function setTimerUI(frac, remaining) {
+  if (!timerFill) return;
+  timerFill.style.width = Math.max(0, Math.min(1, frac)) * 100 + "%";
+  timerFill.classList.toggle("low", frac <= 0.34);
+  if (timerSecs) timerSecs.textContent = Math.max(0, Math.ceil(remaining)) + "s";
+}
+function stopTimer() { if (G && G.timerId) { clearInterval(G.timerId); G.timerId = null; } }
+function remainingFraction() {
+  return Math.max(0, (ROUND_SECONDS - (performance.now() - G.roundStart) / 1000) / ROUND_SECONDS);
+}
+
 /* ---------------- Game flow ---------------- */
 async function startGame(mapId) {
   const config = MAPS[mapId];
+  const mode = modeSelect.value;            // "relaxed" | "timed"
   promptName.textContent = "—";
   clear(feedbackEl);
   setMapMessage(["Loading map…"]);
   show(screenGame);
+  screenGame.classList.toggle("timed", mode === "timed");
 
   let loaded;
   try {
@@ -393,92 +571,140 @@ async function startGame(mapId) {
   }
 
   const view = renderMap(loaded);
-  const order = shuffle(loaded.features);
+  const order = pickRounds(buildTargets(loaded));
+
+  promptLabel.textContent = "Find this " + (config.unit || "place");
 
   G = {
-    view,
-    config,
-    order,
-    nameProp: config.nameProp,
-    index: 0,
-    score: 0,
-    results: [],
-    awaiting: false,
-    current: null,
-    maxScore: order.length * 100
+    view, config, mapId, mode, order,
+    index: 0, score: 0, bonus: 0, streak: 0,
+    results: [], awaiting: false, current: null,
+    maxScore: order.length * 100,
+    timerId: null, roundStart: 0
   };
 
   view.svg.on("click", onGuess);
   hudScore.textContent = "0";
+  if (hudStreak) hudStreak.textContent = "🔥0";
   nextPrompt();
+}
+
+function pickRounds(targets) {
+  const v = roundSelect.value, all = targets.length;
+  const want = v === "all" ? all : Math.min(parseInt(v, 10) || all, all);
+  return shuffle(targets).slice(0, want);
 }
 
 function nextPrompt() {
   if (G.index >= G.order.length) { showFinal(); return; }
-  const feature = G.order[G.index];
-  G.current = feature;
+  const t = G.order[G.index];
+  G.current = t;
   G.awaiting = true;
-  promptName.textContent = feature.properties[G.nameProp];
+  promptName.textContent = t.name;
   hudRound.textContent = (G.index + 1) + "/" + G.order.length;
   clear(feedbackEl);
   G.view.svg.classed("awaiting", true);
+  if (G.mode === "timed") startTimer();
 }
 
 function onGuess(event) {
   if (!G || !G.awaiting) return;
+  const frac = G.mode === "timed" ? remainingFraction() : 1;
+  stopTimer();
   G.awaiting = false;
   G.view.svg.classed("awaiting", false);
 
   const [x, y] = d3.pointer(event, G.view.svg.node());
   const lngLat = G.view.projection.invert([x, y]);   // may be null outside the projection
+  const t = G.current;
 
-  const feature = G.current;
-  const name = feature.properties[G.nameProp];
-  const inside = !!(lngLat && d3.geoContains(feature, lngLat));
-  const miles = inside ? 0 : (lngLat ? milesToFeature(feature, lngLat) : Infinity);
-  const pts = scoreFor(inside, miles);
+  let inside, miles;
+  if (t.kind === "point") {
+    miles = lngLat ? milesBetween(lngLat, t.coords) : Infinity;
+    inside = isFinite(miles) && miles <= POINT_PERFECT_MI;
+  } else {
+    inside = !!(lngLat && d3.geoContains(t.feature, lngLat));
+    miles = inside ? 0 : (lngLat ? milesToFeature(t.feature, lngLat) : Infinity);
+  }
+  const accPts = scoreFor(inside, miles, G.config.decayMiles);
 
-  G.score += pts;
-  hudScore.textContent = G.score;
-  G.results.push({ name, inside, miles, pts });
+  let bonus = 0;
+  if (G.mode === "timed") {
+    const speed = lngLat ? Math.round(50 * frac * accPts / 100) : 0;
+    const good = inside || accPts >= STREAK_GOOD;
+    G.streak = good ? G.streak + 1 : 0;
+    const streakBonus = good ? Math.min(G.streak, 5) * 10 : 0;
+    bonus = speed + streakBonus;
+    if (hudStreak) hudStreak.textContent = "🔥" + G.streak;
+  }
 
-  revealAnswer({ x, y, feature, inside, miles, pts });
+  G.score += accPts;
+  G.bonus += bonus;
+  hudScore.textContent = (G.score + G.bonus).toLocaleString();
+  G.results.push({ name: t.name, inside, miles, accPts, bonus, kind: t.kind, timedOut: false });
+
+  revealAnswer({ hasGuess: true, x, y, target: t, inside, miles, accPts, bonus, timedOut: false });
+}
+
+function onTimeout() {
+  if (!G || !G.awaiting) return;
+  G.awaiting = false;
+  G.view.svg.classed("awaiting", false);
+  G.streak = 0;
+  if (hudStreak) hudStreak.textContent = "🔥0";
+  const t = G.current;
+  G.results.push({ name: t.name, inside: false, miles: Infinity, accPts: 0, bonus: 0, kind: t.kind, timedOut: true });
+  revealAnswer({ hasGuess: false, target: t, inside: false, miles: Infinity, accPts: 0, bonus: 0, timedOut: true });
 }
 
 function revealAnswer(r) {
-  const { overlay, path, byName, config } = G.view;
-  const name = r.feature.properties[config.nameProp];
+  const { overlay, path, byName, projection } = G.view;
+  const t = r.target;
+  const name = t.name;
 
-  // Highlight the correct state.
-  const node = byName.get(name);
-  if (node) node.classList.add("reveal");
-
-  // Truth point = state centroid (in screen units).
-  const centroid = path.centroid(r.feature);
+  // Truth point: centroid for regions, projected coordinate for points.
+  let truth = null;
+  if (t.kind === "point") {
+    truth = projection(t.coords);
+  } else {
+    const node = byName.get(name);
+    if (node) node.classList.add("reveal");
+    truth = path.centroid(t.feature);
+  }
 
   overlay.selectAll("*").remove();
-  if (centroid && isFinite(centroid[0])) {
-    overlay.append("line").attr("class", "guess-line")
-      .attr("x1", r.x).attr("y1", r.y).attr("x2", centroid[0]).attr("y2", centroid[1]);
+  const truthOk = truth && isFinite(truth[0]) && isFinite(truth[1]);
+  if (truthOk) {
+    if (r.hasGuess) {
+      overlay.append("line").attr("class", "guess-line")
+        .attr("x1", r.x).attr("y1", r.y).attr("x2", truth[0]).attr("y2", truth[1]);
+    }
     overlay.append("circle").attr("class", "truth-dot")
-      .attr("cx", centroid[0]).attr("cy", centroid[1]).attr("r", 5);
+      .attr("cx", truth[0]).attr("cy", truth[1]).attr("r", 5);
     overlay.append("text").attr("class", "state-label")
-      .attr("x", centroid[0]).attr("y", centroid[1] - 12).text(name);
+      .attr("x", truth[0]).attr("y", truth[1] - 12).text(name);
   }
-  overlay.append("circle").attr("class", "guess-dot")
-    .attr("cx", r.x).attr("cy", r.y).attr("r", 6);
+  if (r.hasGuess) {
+    overlay.append("circle").attr("class", "guess-dot")
+      .attr("cx", r.x).attr("cy", r.y).attr("r", 6);
+  }
 
   // Feedback row + Next button.
   const isLast = G.index >= G.order.length - 1;
   clear(feedbackEl);
 
+  let head;
+  if (r.timedOut) head = "Time's up! It was " + name + ". ";
+  else if (r.inside) head = (t.kind === "point" ? "Spot on! " : "Bullseye! Inside ") + name + ". ";
+  else head = Math.round(r.miles).toLocaleString() + " mi from " + name + ". ";
+
   const verdict = makeEl("div", "verdict" + (r.inside ? " perfect" : ""));
-  verdict.appendChild(document.createTextNode(
-    r.inside
-      ? "Bullseye! Inside " + name + ". "
-      : Math.round(r.miles).toLocaleString() + " mi from " + name + ". "
-  ));
-  verdict.appendChild(makeEl("span", "pts", "+" + r.pts));
+  verdict.appendChild(document.createTextNode(head));
+  verdict.appendChild(makeEl("span", "pts", "+" + r.accPts));
+  if (r.bonus > 0) {
+    verdict.appendChild(document.createTextNode(" "));
+    verdict.appendChild(makeEl("span", "bonus", "+" + r.bonus + " bonus"));
+  }
   feedbackEl.appendChild(verdict);
 
   feedbackEl.appendChild(makeEl("span", "sub", isLast ? "Last one!" : "Press Enter or click Next"));
@@ -491,9 +717,10 @@ function revealAnswer(r) {
 }
 
 function advance() {
+  stopTimer();
   G.view.overlay.selectAll("*").remove();
-  if (G.current) {
-    const node = G.view.byName.get(G.current.properties[G.config.nameProp]);
+  if (G.current && G.current.kind === "region") {
+    const node = G.view.byName.get(G.current.name);
     if (node) node.classList.remove("reveal");
   }
   G.index += 1;
@@ -501,14 +728,35 @@ function advance() {
 }
 
 function showFinal() {
-  const pct = Math.round((G.score / G.maxScore) * 100);
-  el("final-score").textContent = G.score.toLocaleString();
-  el("final-sub").textContent = "out of " + G.maxScore.toLocaleString() + " · " + pct + "% accuracy";
+  stopTimer();
+  const acc = G.score, maxAcc = G.maxScore;
+  const pct = maxAcc ? Math.round((acc / maxAcc) * 100) : 0;
+  const total = acc + G.bonus;
+  const timed = G.mode === "timed";
+  const headline = timed ? total : acc;
+
+  el("final-score").textContent = headline.toLocaleString();
+
+  const key = bestKey(G.mapId, G.order.length, G.mode);
+  const prev = readBest(key);
+  const isBest = prev == null || headline > prev;
+  if (isBest) writeBest(key, headline);
+  const best = isBest ? headline : prev;
+
+  let sub;
+  if (timed) {
+    sub = "Accuracy " + acc.toLocaleString() + " (" + pct + "%) · Bonus +" + G.bonus.toLocaleString()
+        + " · Total " + total.toLocaleString();
+  } else {
+    sub = "out of " + maxAcc.toLocaleString() + " · " + pct + "% accuracy";
+  }
+  sub += isBest ? " · ★ New best!" : " · best " + best.toLocaleString();
+  el("final-sub").textContent = sub;
 
   const recap = el("recap");
   clear(recap);
   for (const r of G.results) {
-    const c = ptColor(r.pts);
+    const c = ptColor(r.accPts);
     const row = makeEl("div", "recap-row");
 
     const dot = makeEl("span", "dotmark");
@@ -516,20 +764,49 @@ function showFinal() {
     row.appendChild(dot);
 
     row.appendChild(makeEl("span", "nm", r.name));
-    row.appendChild(makeEl("span", "ds", r.inside ? "inside" : Math.round(r.miles).toLocaleString() + " mi off"));
+    const status = r.timedOut ? "time's up"
+      : (r.inside ? "inside" : Math.round(r.miles).toLocaleString() + " mi off");
+    row.appendChild(makeEl("span", "ds", status));
 
-    const pt = makeEl("span", "pt", String(r.pts));
+    const pt = makeEl("span", "pt", r.accPts + (r.bonus > 0 ? " +" + r.bonus : ""));
     pt.style.color = c;
     row.appendChild(pt);
 
     recap.appendChild(row);
   }
 
+  if (btnCopy) btnCopy.textContent = "Copy result";
+  if (shareField) { shareField.classList.add("hidden"); shareField.value = ""; }
+
   show(screenFinal);
+}
+
+/* ---------------- Share ---------------- */
+function buildShareText() {
+  const acc = G.score, total = acc + G.bonus;
+  const pct = G.maxScore ? Math.round((acc / G.maxScore) * 100) : 0;
+  const timed = G.mode === "timed";
+  const headline = timed ? total : acc;
+  const tag = G.config.label + " · " + G.order.length + (timed ? " · timed" : "");
+  return "Geo Placer — " + tag + ": " + headline.toLocaleString() + " (" + pct + "%). Beat me 👉 " + SHARE_URL;
+}
+async function copyResult() {
+  const text = buildShareText();
+  try {
+    await navigator.clipboard.writeText(text);
+    btnCopy.textContent = "Copied!";
+    setTimeout(() => { if (btnCopy) btnCopy.textContent = "Copy result"; }, 1800);
+  } catch (e) {
+    shareField.value = text;
+    shareField.classList.remove("hidden");
+    shareField.focus();
+    shareField.select();
+  }
 }
 
 /* ---------------- Screen switching ---------------- */
 function show(screen) {
+  stopTimer();
   for (const s of [screenTitle, screenGame, screenFinal]) s.classList.add("hidden");
   screen.classList.remove("hidden");
 }
@@ -542,18 +819,28 @@ function populateMapSelect() {
     opt.value = id;
     mapSelect.appendChild(opt);
   }
-  // Hide the selector while there's only one map.
-  mapSelect.classList.toggle("hidden", Object.keys(MAPS).length <= 1);
 }
-
-function mapIdOf(config) {
-  for (const [id, cfg] of Object.entries(MAPS)) if (cfg === config) return id;
-  return mapSelect.value;
+const ROUND_OPTIONS = [["10", "Quick — 10"], ["25", "Standard — 25"], ["50", "Long — 50"], ["all", "Marathon — all"]];
+function populateRoundSelect() {
+  clear(roundSelect);
+  for (const [v, l] of ROUND_OPTIONS) {
+    const o = makeEl("option", null, l); o.value = v; roundSelect.appendChild(o);
+  }
+  roundSelect.value = "all";
+}
+const MODE_OPTIONS = [["relaxed", "Relaxed"], ["timed", "Timed — 12s + streaks"]];
+function populateModeSelect() {
+  clear(modeSelect);
+  for (const [v, l] of MODE_OPTIONS) {
+    const o = makeEl("option", null, l); o.value = v; modeSelect.appendChild(o);
+  }
+  modeSelect.value = "relaxed";
 }
 
 el("btn-start").addEventListener("click", () => startGame(mapSelect.value));
-el("btn-again").addEventListener("click", () => startGame(G ? mapIdOf(G.config) : mapSelect.value));
+el("btn-again").addEventListener("click", () => startGame(G ? G.mapId : mapSelect.value));
 el("btn-home").addEventListener("click", () => show(screenTitle));
+btnCopy.addEventListener("click", copyResult);
 document.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !screenGame.classList.contains("hidden")) {
     const next = el("btn-next");
@@ -562,6 +849,8 @@ document.addEventListener("keydown", (e) => {
 });
 
 populateMapSelect();
+populateRoundSelect();
+populateModeSelect();
 </script>
 </body>
 </html>
