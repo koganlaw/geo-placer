@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Geo Placer — Pin the State</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --bg: #0f1724;
+    --bg-2: #16213a;
+    --panel: #1b2742;
+    --land: #e8e3d6;
+    --land-edge: #b9b09a;
+    --water: #14304a;
+    --accent: #4fd1c5;
+    --accent-2: #f6c65b;
+    --target: #ff6b6b;
+    --target-edge: #c92a2a;
+    --text: #eaf0f7;
+    --muted: #9fb0c7;
+    --good: #51cf66;
+    --mid: #f6c65b;
+    --bad: #ff8787;
+    --ring: #ffffff;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: radial-gradient(1200px 800px at 50% -10%, var(--bg-2), var(--bg));
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  #app {
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .screen { width: 100%; max-width: 1080px; padding: 18px 18px 32px; }
+  .hidden { display: none !important; }
+
+  /* ---- Title screen ---- */
+  #screen-title { text-align: center; padding-top: 8vh; }
+  #screen-title h1 {
+    font-size: clamp(34px, 6vw, 64px);
+    margin: 0 0 6px;
+    letter-spacing: -0.02em;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .tagline { color: var(--muted); font-size: clamp(15px, 2.2vw, 20px); margin: 0 auto 28px; max-width: 560px; line-height: 1.5; }
+  .how {
+    background: var(--panel); border: 1px solid #2a3a5e; border-radius: 14px;
+    padding: 18px 22px; max-width: 540px; margin: 0 auto 26px; text-align: left;
+  }
+  .how h3 { margin: 0 0 10px; font-size: 16px; color: var(--accent); }
+  .how ol { margin: 0; padding-left: 20px; color: var(--muted); line-height: 1.7; font-size: 15px; }
+  .how b { color: var(--text); }
+  .controls { display: flex; gap: 14px; justify-content: center; align-items: center; flex-wrap: wrap; }
+  select, button {
+    font: inherit; border-radius: 10px; border: 1px solid #33466e;
+    background: var(--panel); color: var(--text); padding: 12px 18px; cursor: pointer;
+  }
+  select { padding-right: 36px; }
+  button.primary {
+    background: linear-gradient(90deg, var(--accent), #38b2ac);
+    color: #062b2a; font-weight: 700; border: none; padding: 13px 30px; font-size: 17px;
+  }
+  button.primary:hover { filter: brightness(1.06); }
+  button:disabled { opacity: 0.5; cursor: default; }
+
+  /* ---- Game screen ---- */
+  #screen-game { max-width: 1080px; }
+  .hud {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    background: var(--panel); border: 1px solid #2a3a5e; border-radius: 14px;
+    padding: 12px 18px; margin-bottom: 14px;
+  }
+  .prompt-wrap { flex: 1 1 auto; min-width: 220px; }
+  .prompt-label { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; }
+  .prompt-name { font-size: clamp(24px, 4vw, 36px); font-weight: 800; line-height: 1.05; }
+  .hud-stat { text-align: center; min-width: 78px; }
+  .hud-stat .v { font-size: 22px; font-weight: 800; }
+  .hud-stat .k { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+
+  .map-card {
+    position: relative; background: var(--water);
+    border: 1px solid #24405f; border-radius: 16px; overflow: hidden;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.35);
+  }
+  svg { display: block; width: 100%; height: auto; }
+  svg.awaiting { cursor: crosshair; }
+  .sea { fill: var(--water); }
+  .silhouette { fill: var(--land); stroke: var(--land-edge); stroke-width: 0.8; stroke-linejoin: round; }
+  .state { fill: transparent; stroke: none; pointer-events: none; transition: fill 0.18s ease; }
+  .state.reveal { fill: var(--target); stroke: var(--target-edge); stroke-width: 1; }
+  .guess-line { stroke: var(--ring); stroke-width: 2; stroke-dasharray: 4 4; opacity: 0.9; }
+  .guess-dot { fill: var(--ring); stroke: #0b1a2b; stroke-width: 1.5; }
+  .truth-dot { fill: var(--accent-2); stroke: #5c4a12; stroke-width: 1.5; }
+  .state-label {
+    fill: #11202f; font-weight: 800; font-size: 15px; paint-order: stroke;
+    stroke: #ffffffcc; stroke-width: 4px; stroke-linejoin: round; text-anchor: middle;
+  }
+
+  .feedback {
+    margin-top: 14px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    min-height: 56px;
+  }
+  .verdict {
+    font-size: 20px; font-weight: 800; padding: 10px 16px; border-radius: 12px;
+    background: var(--panel); border: 1px solid #2a3a5e;
+  }
+  .verdict .pts { color: var(--accent); }
+  .verdict.perfect { border-color: var(--good); }
+  .verdict.perfect .pts { color: var(--good); }
+  .feedback .sub { color: var(--muted); font-size: 15px; }
+  .feedback .spacer { flex: 1 1 auto; }
+  .loading { color: var(--muted); padding: 40px; text-align: center; font-size: 17px; }
+
+  /* ---- Final screen ---- */
+  #screen-final { text-align: center; padding-top: 4vh; }
+  #screen-final h2 { font-size: clamp(26px, 5vw, 44px); margin: 0 0 4px; }
+  .final-score { font-size: clamp(46px, 10vw, 88px); font-weight: 900; line-height: 1;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .final-sub { color: var(--muted); margin: 6px 0 24px; font-size: 18px; }
+  .recap {
+    background: var(--panel); border: 1px solid #2a3a5e; border-radius: 14px;
+    max-width: 620px; margin: 0 auto 24px; max-height: 46vh; overflow: auto; text-align: left;
+  }
+  .recap-row { display: flex; align-items: center; gap: 12px; padding: 9px 16px; border-bottom: 1px solid #243456; }
+  .recap-row:last-child { border-bottom: none; }
+  .recap-row .nm { flex: 1 1 auto; font-weight: 600; }
+  .recap-row .ds { color: var(--muted); font-size: 14px; min-width: 96px; text-align: right; }
+  .recap-row .pt { font-weight: 800; min-width: 54px; text-align: right; }
+  .dotmark { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ===================== TITLE ===================== -->
+  <section id="screen-title" class="screen">
+    <h1>Geo Placer</h1>
+    <p class="tagline">You're shown a name. Tap where it belongs on a blank map. The closer you land, the more you score.</p>
+    <div class="how">
+      <h3>How to play</h3>
+      <ol>
+        <li>You'll be given a <b>state name</b>, one at a time.</li>
+        <li><b>Click the map</b> where you think that state is.</li>
+        <li>Land <b>inside the state</b> &rarr; a perfect <b>100</b>. Miss it, and points fall off with distance.</li>
+        <li>All <b>50 states</b>, in random order. Max score <b>5000</b>.</li>
+      </ol>
+    </div>
+    <div class="controls">
+      <label class="hidden" for="map-select">Map</label>
+      <select id="map-select" aria-label="Choose a map"></select>
+      <button class="primary" id="btn-start">Start game</button>
+    </div>
+  </section>
+
+  <!-- ===================== GAME ===================== -->
+  <section id="screen-game" class="screen hidden">
+    <div class="hud">
+      <div class="prompt-wrap">
+        <div class="prompt-label">Find this state</div>
+        <div class="prompt-name" id="prompt-name">&mdash;</div>
+      </div>
+      <div class="hud-stat"><div class="v" id="hud-round">1/50</div><div class="k">Round</div></div>
+      <div class="hud-stat"><div class="v" id="hud-score">0</div><div class="k">Score</div></div>
+    </div>
+
+    <div class="map-card" id="map-card">
+      <div class="loading">Loading map&hellip;</div>
+    </div>
+
+    <div class="feedback" id="feedback"></div>
+  </section>
+
+  <!-- ===================== FINAL ===================== -->
+  <section id="screen-final" class="screen hidden">
+    <h2>Game over</h2>
+    <div class="final-score" id="final-score">0</div>
+    <div class="final-sub" id="final-sub">out of 5000</div>
+    <div class="recap" id="recap"></div>
+    <div class="controls">
+      <button class="primary" id="btn-again">Play again</button>
+      <button id="btn-home">Change map</button>
+    </div>
+  </section>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
+<script>
+"use strict";
+
+/* ============================================================
+   Geo Placer — the engine is map-agnostic.
+   Add a new map by adding one entry to MAPS below.
+   ============================================================ */
+
+const WIDTH = 960, HEIGHT = 600;        // internal SVG coordinate system (viewBox)
+const EARTH_MILES = 3958.8;             // mean radius
+const DECAY_MILES = 300;                // outside score = 100 * exp(-milesOff / DECAY_MILES)
+
+// The 50 states (excludes DC & territories) — used to filter the US dataset.
+const US_STATES = new Set([
+  "Alabama","Alaska","Arizona","Arkansas","California","Colorado","Connecticut",
+  "Delaware","Florida","Georgia","Hawaii","Idaho","Illinois","Indiana","Iowa",
+  "Kansas","Kentucky","Louisiana","Maine","Maryland","Massachusetts","Michigan",
+  "Minnesota","Mississippi","Missouri","Montana","Nebraska","Nevada","New Hampshire",
+  "New Jersey","New Mexico","New York","North Carolina","North Dakota","Ohio",
+  "Oklahoma","Oregon","Pennsylvania","Rhode Island","South Carolina","South Dakota",
+  "Tennessee","Texas","Utah","Vermont","Virginia","Washington","West Virginia",
+  "Wisconsin","Wyoming"
+]);
+
+const MAPS = {
+  "us-states": {
+    label: "United States — 50 states",
+    topojson: "https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json",
+    object: "states",                 // key in topo.objects
+    nameProp: "name",                 // feature.properties[nameProp]
+    nationObject: "nation",           // optional pre-merged silhouette
+    filterNames: US_STATES,           // optional: keep only these features
+    projection: () => d3.geoAlbersUsa()
+  }
+  // Future example (drop-in):
+  // "world": {
+  //   label: "World — countries",
+  //   topojson: "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json",
+  //   object: "countries", nameProp: "name",
+  //   projection: () => d3.geoNaturalEarth1()
+  // }
+};
+
+/* ---------------- DOM refs ---------------- */
+const el = (id) => document.getElementById(id);
+const screenTitle = el("screen-title");
+const screenGame  = el("screen-game");
+const screenFinal = el("screen-final");
+const mapSelect   = el("map-select");
+const mapCard     = el("map-card");
+const feedbackEl  = el("feedback");
+const promptName  = el("prompt-name");
+const hudRound    = el("hud-round");
+const hudScore    = el("hud-score");
+
+/* ---------------- Game state ---------------- */
+let G = null;   // active game object
+
+/* ---------------- Small DOM helpers (no innerHTML — XSS-safe) ---------------- */
+function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+function makeEl(tag, className, text) {
+  const n = document.createElement(tag);
+  if (className) n.className = className;
+  if (text != null) n.textContent = text;
+  return n;
+}
+function setMapMessage(lines) {
+  clear(mapCard);
+  const d = makeEl("div", "loading");
+  lines.forEach((ln, i) => {
+    if (i) d.appendChild(document.createElement("br"));
+    d.appendChild(document.createTextNode(ln));
+  });
+  mapCard.appendChild(d);
+}
+
+/* ---------------- Utilities ---------------- */
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// Great-circle distance (miles) between two [lng,lat] points.
+function milesBetween(a, b) { return d3.geoDistance(a, b) * EARTH_MILES; }
+
+// Distance (miles) from a point to the nearest boundary vertex of a feature.
+// Vertex approximation — accurate enough for scoring.
+function milesToFeature(feature, point) {
+  let min = Infinity;
+  const g = feature.geometry;
+  const polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates; // MultiPolygon
+  for (const poly of polys) {
+    for (const ring of poly) {
+      for (const vertex of ring) {
+        const d = milesBetween(point, vertex);
+        if (d < min) min = d;
+      }
+    }
+  }
+  return min;
+}
+
+function scoreFor(inside, miles) {
+  if (inside) return 100;
+  if (!isFinite(miles)) return 0;
+  return Math.round(100 * Math.exp(-miles / DECAY_MILES));
+}
+
+function ptColor(pts) {
+  if (pts >= 100) return "var(--good)";
+  if (pts >= 40)  return "var(--mid)";
+  return "var(--bad)";
+}
+
+/* ---------------- Map loading ---------------- */
+async function loadMap(config) {
+  const topo = await fetch(config.topojson).then(r => {
+    if (!r.ok) throw new Error("Failed to load map data (" + r.status + ")");
+    return r.json();
+  });
+
+  const obj = topo.objects[config.object];
+  let geoms = obj.geometries;
+  if (config.filterNames) {
+    geoms = geoms.filter(g => g.properties && config.filterNames.has(g.properties[config.nameProp]));
+  }
+  const features = geoms.map(g => topojson.feature(topo, g));
+
+  // Silhouette: prefer a pre-merged "nation" object; else merge the kept geometries.
+  let silhouette;
+  if (config.nationObject && topo.objects[config.nationObject]) {
+    silhouette = topojson.feature(topo, topo.objects[config.nationObject]);
+  } else {
+    silhouette = { type: "Feature", geometry: topojson.merge(topo, geoms) };
+  }
+
+  return { features, silhouette, config };
+}
+
+/* ---------------- Rendering ---------------- */
+function renderMap(map) {
+  const { features, silhouette, config } = map;
+
+  const projection = config.projection().fitSize([WIDTH, HEIGHT], silhouette);
+  const path = d3.geoPath(projection);
+
+  clear(mapCard);
+  const svg = d3.select(mapCard).append("svg")
+    .attr("viewBox", `0 0 ${WIDTH} ${HEIGHT}`)
+    .attr("preserveAspectRatio", "xMidYMid meet")
+    .classed("awaiting", true);
+
+  // Clickable sea backdrop (so clicks anywhere register).
+  svg.append("rect").attr("class", "sea")
+     .attr("x", 0).attr("y", 0).attr("width", WIDTH).attr("height", HEIGHT);
+
+  // Blank land silhouette — single shape, no internal borders.
+  svg.append("path").attr("class", "silhouette").attr("d", path(silhouette));
+
+  // Per-feature paths (transparent) kept for reveal highlighting; not for hit-testing.
+  const byName = new Map();
+  const gStates = svg.append("g");
+  features.forEach(f => {
+    const node = gStates.append("path")
+      .attr("class", "state")
+      .attr("d", path(f))
+      .node();
+    byName.set(f.properties[config.nameProp], node);
+  });
+
+  // Overlay group for markers/lines/labels drawn after each guess.
+  const overlay = svg.append("g").attr("class", "overlay");
+
+  return { svg, path, projection, byName, overlay, features, config };
+}
+
+/* ---------------- Game flow ---------------- */
+async function startGame(mapId) {
+  const config = MAPS[mapId];
+  promptName.textContent = "—";
+  clear(feedbackEl);
+  setMapMessage(["Loading map…"]);
+  show(screenGame);
+
+  let loaded;
+  try {
+    loaded = await loadMap(config);
+  } catch (err) {
+    setMapMessage(["Could not load the map.", "Check your internet connection and try again."]);
+    console.error(err);
+    return;
+  }
+
+  const view = renderMap(loaded);
+  const order = shuffle(loaded.features);
+
+  G = {
+    view,
+    config,
+    order,
+    nameProp: config.nameProp,
+    index: 0,
+    score: 0,
+    results: [],
+    awaiting: false,
+    current: null,
+    maxScore: order.length * 100
+  };
+
+  view.svg.on("click", onGuess);
+  hudScore.textContent = "0";
+  nextPrompt();
+}
+
+function nextPrompt() {
+  if (G.index >= G.order.length) { showFinal(); return; }
+  const feature = G.order[G.index];
+  G.current = feature;
+  G.awaiting = true;
+  promptName.textContent = feature.properties[G.nameProp];
+  hudRound.textContent = (G.index + 1) + "/" + G.order.length;
+  clear(feedbackEl);
+  G.view.svg.classed("awaiting", true);
+}
+
+function onGuess(event) {
+  if (!G || !G.awaiting) return;
+  G.awaiting = false;
+  G.view.svg.classed("awaiting", false);
+
+  const [x, y] = d3.pointer(event, G.view.svg.node());
+  const lngLat = G.view.projection.invert([x, y]);   // may be null outside the projection
+
+  const feature = G.current;
+  const name = feature.properties[G.nameProp];
+  const inside = !!(lngLat && d3.geoContains(feature, lngLat));
+  const miles = inside ? 0 : (lngLat ? milesToFeature(feature, lngLat) : Infinity);
+  const pts = scoreFor(inside, miles);
+
+  G.score += pts;
+  hudScore.textContent = G.score;
+  G.results.push({ name, inside, miles, pts });
+
+  revealAnswer({ x, y, feature, inside, miles, pts });
+}
+
+function revealAnswer(r) {
+  const { overlay, path, byName, config } = G.view;
+  const name = r.feature.properties[config.nameProp];
+
+  // Highlight the correct state.
+  const node = byName.get(name);
+  if (node) node.classList.add("reveal");
+
+  // Truth point = state centroid (in screen units).
+  const centroid = path.centroid(r.feature);
+
+  overlay.selectAll("*").remove();
+  if (centroid && isFinite(centroid[0])) {
+    overlay.append("line").attr("class", "guess-line")
+      .attr("x1", r.x).attr("y1", r.y).attr("x2", centroid[0]).attr("y2", centroid[1]);
+    overlay.append("circle").attr("class", "truth-dot")
+      .attr("cx", centroid[0]).attr("cy", centroid[1]).attr("r", 5);
+    overlay.append("text").attr("class", "state-label")
+      .attr("x", centroid[0]).attr("y", centroid[1] - 12).text(name);
+  }
+  overlay.append("circle").attr("class", "guess-dot")
+    .attr("cx", r.x).attr("cy", r.y).attr("r", 6);
+
+  // Feedback row + Next button.
+  const isLast = G.index >= G.order.length - 1;
+  clear(feedbackEl);
+
+  const verdict = makeEl("div", "verdict" + (r.inside ? " perfect" : ""));
+  verdict.appendChild(document.createTextNode(
+    r.inside
+      ? "Bullseye! Inside " + name + ". "
+      : Math.round(r.miles).toLocaleString() + " mi from " + name + ". "
+  ));
+  verdict.appendChild(makeEl("span", "pts", "+" + r.pts));
+  feedbackEl.appendChild(verdict);
+
+  feedbackEl.appendChild(makeEl("span", "sub", isLast ? "Last one!" : "Press Enter or click Next"));
+  feedbackEl.appendChild(makeEl("span", "spacer"));
+
+  const nextBtn = makeEl("button", "primary", isLast ? "See results" : "Next ▸");
+  nextBtn.id = "btn-next";
+  nextBtn.addEventListener("click", advance);
+  feedbackEl.appendChild(nextBtn);
+}
+
+function advance() {
+  G.view.overlay.selectAll("*").remove();
+  if (G.current) {
+    const node = G.view.byName.get(G.current.properties[G.config.nameProp]);
+    if (node) node.classList.remove("reveal");
+  }
+  G.index += 1;
+  nextPrompt();
+}
+
+function showFinal() {
+  const pct = Math.round((G.score / G.maxScore) * 100);
+  el("final-score").textContent = G.score.toLocaleString();
+  el("final-sub").textContent = "out of " + G.maxScore.toLocaleString() + " · " + pct + "% accuracy";
+
+  const recap = el("recap");
+  clear(recap);
+  for (const r of G.results) {
+    const c = ptColor(r.pts);
+    const row = makeEl("div", "recap-row");
+
+    const dot = makeEl("span", "dotmark");
+    dot.style.background = c;
+    row.appendChild(dot);
+
+    row.appendChild(makeEl("span", "nm", r.name));
+    row.appendChild(makeEl("span", "ds", r.inside ? "inside" : Math.round(r.miles).toLocaleString() + " mi off"));
+
+    const pt = makeEl("span", "pt", String(r.pts));
+    pt.style.color = c;
+    row.appendChild(pt);
+
+    recap.appendChild(row);
+  }
+
+  show(screenFinal);
+}
+
+/* ---------------- Screen switching ---------------- */
+function show(screen) {
+  for (const s of [screenTitle, screenGame, screenFinal]) s.classList.add("hidden");
+  screen.classList.remove("hidden");
+}
+
+/* ---------------- Wire up ---------------- */
+function populateMapSelect() {
+  clear(mapSelect);
+  for (const [id, cfg] of Object.entries(MAPS)) {
+    const opt = makeEl("option", null, cfg.label);
+    opt.value = id;
+    mapSelect.appendChild(opt);
+  }
+  // Hide the selector while there's only one map.
+  mapSelect.classList.toggle("hidden", Object.keys(MAPS).length <= 1);
+}
+
+function mapIdOf(config) {
+  for (const [id, cfg] of Object.entries(MAPS)) if (cfg === config) return id;
+  return mapSelect.value;
+}
+
+el("btn-start").addEventListener("click", () => startGame(mapSelect.value));
+el("btn-again").addEventListener("click", () => startGame(G ? mapIdOf(G.config) : mapSelect.value));
+el("btn-home").addEventListener("click", () => show(screenTitle));
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !screenGame.classList.contains("hidden")) {
+    const next = el("btn-next");
+    if (next) { e.preventDefault(); next.click(); }
+  }
+});
+
+populateMapSelect();
+</script>
+</body>
+</html>
